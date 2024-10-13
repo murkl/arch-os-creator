@@ -26,7 +26,7 @@ Minimal Auto-Installer: Boot from new created USB Device and install **[ ➜ Arc
 ## Dependencies
 
 ```
-sh curl lsblk
+sh curl lsblk sha256sum
 ```
 
 ## Override Variables
