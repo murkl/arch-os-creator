@@ -1,9 +1,9 @@
+<div align="center">
+
 # Arch OS Bootable Device Creator
 
 **[ ➜ Run One-line POSIX Executable](#create-bootable-usb-device)**
-<br><sub></sub>
 
-<div align="center">
 <p><img src="./screenshot.png"></p>
   <p>
     <img src="https://img.shields.io/badge/MAINTAINED-YES-green?style=for-the-badge">
