@@ -1,6 +1,6 @@
 # Arch OS Bootable Device Creator
 
-**[ ➜ One-line POSIX Executable](#run-arch-os-iso-creator)**
+**[ ➜ Run One-line POSIX Executable](#create-bootable-usb-device)**
 <br><sub></sub>
 
 <div align="center">
@@ -13,28 +13,27 @@
   <p><sub>powered by <a href="https://github.com/murkl/arch-os">Arch OS</a></sub></p>
 </div>
 
-## Run Bootable Device Creator
+## Create Bootable USB Device
 
-This POSIX script downloads the latest [Arch Linux ISO](https://archlinux.org/download/) and creates a bootable USB device.
+This POSIX script downloads the latest official [Arch Linux ISO](https://archlinux.org/download/) and creates a bootable USB device on Linux.
 
 ```
 curl -Ls https://raw.githubusercontent.com/murkl/arch-os-creator/refs/heads/main/creator.sh | bash
 ```
 
-Minimal Auto-Installer: Boot from new created USB Device and install **[ ➜ Arch OS](https://github.com/murkl/arch-os)**
+Afterwards install: **[ ➜ Arch OS](https://github.com/murkl/arch-os)**
 
-## Dependencies
-
-```
-sh curl lsblk sha256sum
-```
-
-## Override Variables
+### Dependencies
 
 ```
-ARCH_ISO_DOWNLOAD_DIR="~/Downloads"
-ARCH_ISO_DOWNLOAD_URL="https://mirrors.xtom.de/archlinux/iso/latest"
+sh curl lsblk sha256sum dd grep
+```
 
-# Example
-ARCH_ISO_DOWNLOAD_DIR="/tmp" ./creator.sh
+### Environment Variables
+
+The default variables can be overwritten with `export`. The script checks whether the variables are already set at startup.
+
+```
+export ARCH_ISO_DOWNLOAD_DIR="~/Downloads"
+export ARCH_ISO_DOWNLOAD_MIRROR="https://mirrors.xtom.de/archlinux/iso/latest"
 ```
