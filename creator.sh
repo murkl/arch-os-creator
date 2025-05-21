@@ -94,7 +94,7 @@ total_disks=$(printf '%s\n' "$disk_list" | wc -l)
 
 # User input
 printf "\n:: (1 - %d): " "$total_disks"
-read -r user_input
+read -r user_input </dev/tty
 
 # Validate the input
 if ! [ "$user_input" -eq "$user_input" ] 2>/dev/null ||
@@ -113,7 +113,7 @@ print_green "Selected Disk: ${selected_disk}"
 # Create USB Device
 echo && print_title "Create Bootable USB Device..."
 printf "CAUTION: All data on %s will be removed! Really proceed? [y/N]: " "$selected_disk"
-read -r confirm
+read -r confirm </dev/tty
 case "$confirm" in
 [Yy]*) print_info "Proceeding with ${selected_disk} (${arch_iso_file})" ;;
 *) print_red "Operation cancelled" && exit 0 ;;
