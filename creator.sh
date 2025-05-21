@@ -16,7 +16,7 @@ print_purple() { printf ':: \033[35m%s\033[0m\n' "$1"; }
 print_green() { printf ':: \033[32m%s\033[0m\n' "$1"; }
 print_yellow() { printf ':: \033[33m%s\033[0m\n' "$1"; }
 print_red() { printf ':: \033[31m%s\033[0m\n' "$1"; }
-print_title() { printf '\033[35m// %s\033[0m\n' "$1"; }
+print_title() { printf '\033[34m// %s\033[0m\n' "$1"; }
 print_info() { printf '\033[1;37m%s\033[0m\n' "$1"; }
 print_mesg() { printf '%s\n' "$1"; }
 
