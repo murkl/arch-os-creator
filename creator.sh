@@ -6,6 +6,7 @@
 
 [ -z "$ARCH_ISO_DOWNLOAD_DIR" ] && ARCH_ISO_DOWNLOAD_DIR="$HOME/Downloads"
 [ -z "$ARCH_ISO_DOWNLOAD_MIRROR" ] && ARCH_ISO_DOWNLOAD_MIRROR="https://mirrors.xtom.de/archlinux/iso/latest"
+ARCH_OS_RELEASES_API="https://api.github.com/repos/murkl/arch-os/releases/latest"
 
 # /////////////////////////////////////////////////////
 # FUNCTIONS
@@ -26,54 +27,81 @@ print_mesg() { printf '%s\n' "$1"; }
 
 clear # Clear the screen & print welcome message
 mkdir -p "$ARCH_ISO_DOWNLOAD_DIR" || exit 1
-echo && print_title "Welcome to Arch OS Bootable Device Creator"
-print_mesg "This script downloads the latest Arch Linux ISO"
-print_mesg "and creates a bootable USB device."
+print_title "Welcome to Arch OS Bootable Device Creator"
+print_mesg "This Script download & create a bootable Device"
+print_mesg "from the latest Arch OS or Arch Linux ISO."
 echo && print_mesg "Exit with CTRL + C"
-echo && print_info "Download Mirror:  ${ARCH_ISO_DOWNLOAD_MIRROR}"
-print_info "Download Dir:     ${ARCH_ISO_DOWNLOAD_DIR}"
+
+# Choose ISO source
+echo && print_title "ISO Source"
+printf "Use official Arch Linux ISO instead of Arch OS? [y/N]: "
+read -r use_archlinux </dev/tty
 
 # Fetch download infos
-arch_latest_version="$(curl -Lfs "${ARCH_ISO_DOWNLOAD_MIRROR}"/arch/version)"
-arch_iso_file="archlinux-${arch_latest_version}-x86_64.iso"
-arch_sha_file="archlinux-${arch_latest_version}-x86_64.sha256"
+case "$use_archlinux" in
+[Yy]*)
+	iso_source="Arch Linux"
+	arch_latest_version=$(curl -Lfs "${ARCH_ISO_DOWNLOAD_MIRROR}/arch/version") || exit 1
+	arch_iso_file="archlinux-${arch_latest_version}-x86_64.iso"
+	arch_sha_file="archlinux-${arch_latest_version}-x86_64.sha256"
+	iso_url="${ARCH_ISO_DOWNLOAD_MIRROR}/${arch_iso_file}"
+	sha_url="${ARCH_ISO_DOWNLOAD_MIRROR}/sha256sums.txt"
+	;;
+*)
+	iso_source="Arch OS"
+	release_json=$(curl -Lfs "$ARCH_OS_RELEASES_API") || {
+		print_red "ERROR: Fetching Arch OS release"
+		exit 1
+	}
+	iso_url=$(printf '%s' "$release_json" | grep -oE 'https://[^"]+\.iso' | head -n1)
+	sha_url=$(printf '%s' "$release_json" | grep -oE 'https://[^"]+\.sha256' | head -n1)
+	[ -z "$iso_url" ] && print_red "ERROR: No ISO asset found" && exit 1
+	arch_iso_file="${iso_url##*/}"
+	arch_sha_file="${arch_iso_file}.sha256"
+	;;
+esac
+
+echo
+print_info "ISO Source:   ${iso_source}"
+print_info "ISO File:     ${arch_iso_file}"
+print_info "Download Dir: ${ARCH_ISO_DOWNLOAD_DIR}"
 
 # Downloading ISO if not exists
-echo && print_title "Downloading Arch Linux ISO"
+echo && print_title "Downloading ISO"
 if ! [ -f "${ARCH_ISO_DOWNLOAD_DIR}/${arch_iso_file}" ]; then
-    if ! curl -Lf --progress-bar "${ARCH_ISO_DOWNLOAD_MIRROR}/${arch_iso_file}" -o "${ARCH_ISO_DOWNLOAD_DIR}/${arch_iso_file}.part"; then
-        print_red "ERROR: Downloading Arch ISO"
-        exit 1
-    fi
-    if ! mv "${ARCH_ISO_DOWNLOAD_DIR}/${arch_iso_file}.part" "${ARCH_ISO_DOWNLOAD_DIR}/${arch_iso_file}"; then
-        print_red "ERROR: Moving Arch ISO"
-        exit 1
-    fi
-    print_green "Finished: ${arch_iso_file} successfully downloaded"
+	if ! curl -Lf --progress-bar "${iso_url}" -o "${ARCH_ISO_DOWNLOAD_DIR}/${arch_iso_file}.part"; then
+		print_red "ERROR: Downloading ISO"
+		exit 1
+	fi
+	if ! mv "${ARCH_ISO_DOWNLOAD_DIR}/${arch_iso_file}.part" "${ARCH_ISO_DOWNLOAD_DIR}/${arch_iso_file}"; then
+		print_red "ERROR: Moving ISO"
+		exit 1
+	fi
+	print_green "Finished: ${arch_iso_file} successfully downloaded"
 else
-    print_white "Skipped: ${arch_iso_file} already exists"
+	print_white "Skipped: ${arch_iso_file} already exists"
 fi
 
 # Downloading Checksum if not exists
 if ! [ -f "${ARCH_ISO_DOWNLOAD_DIR}/${arch_sha_file}" ]; then
-    if ! curl -Lf --progress-bar "${ARCH_ISO_DOWNLOAD_MIRROR}/sha256sums.txt" -o "${ARCH_ISO_DOWNLOAD_DIR}/${arch_sha_file}"; then
-        print_red "ERROR: Downloading Checksum"
-        exit 1
-    else
-        print_green "Finished: ${arch_sha_file} successfully downloaded"
-    fi
+	if ! curl -Lf --progress-bar "${sha_url}" -o "${ARCH_ISO_DOWNLOAD_DIR}/${arch_sha_file}"; then
+		print_red "ERROR: Downloading Checksum"
+		exit 1
+	else
+		print_green "Finished: ${arch_sha_file} successfully downloaded"
+	fi
 else
-    print_white "Skipped: ${arch_sha_file} already exists"
+	print_white "Skipped: ${arch_sha_file} already exists"
 fi
 
 # Check ISO sum
 cd "$ARCH_ISO_DOWNLOAD_DIR" || exit 1
 print_white "sha256sum: ${arch_iso_file}..."
 if grep -qrnw "${arch_sha_file}" -e "$(sha256sum "${arch_iso_file}")"; then
-    print_green "Checksum is correct"
+	print_green "Checksum is correct"
 else
-    print_red "ERROR: Checksum incorrect"
-    exit 1
+	print_red "ERROR: Checksum incorrect"
+	exit 1
 fi
 
 # Choose Disk
@@ -84,9 +112,9 @@ print_white "Choose Disk Number:" && echo
 disk_list=$(lsblk -I 8 -d -o KNAME -n) || exit 1
 [ -z "$disk_list" ] && print_red "No disk found" && exit 1
 counter=1 && printf '%s\n' "$disk_list" | while read -r disk_line; do
-    size=$(lsblk -d -n -o SIZE /dev/"$disk_line")
-    printf '%d) /dev/%s (%s)\n' "$counter" "$disk_line" "$size"
-    counter=$((counter + 1))
+	size=$(lsblk -d -n -o SIZE /dev/"$disk_line")
+	printf '%d) /dev/%s (%s)\n' "$counter" "$disk_line" "$size"
+	counter=$((counter + 1))
 done
 
 # Count total number of disks
@@ -98,10 +126,10 @@ read -r user_input </dev/tty
 
 # Validate the input
 if ! [ "$user_input" -eq "$user_input" ] 2>/dev/null ||
-    [ "$user_input" -lt 1 ] ||
-    [ "$user_input" -gt "$total_disks" ]; then
-    print_red "Invalid input! Please choose a number between 1 and ${total_disks}"
-    exit 1
+	[ "$user_input" -lt 1 ] ||
+	[ "$user_input" -gt "$total_disks" ]; then
+	print_red "Invalid input! Please choose a number between 1 and ${total_disks}"
+	exit 1
 fi
 
 # Select the corresponding disk
@@ -121,8 +149,8 @@ esac
 
 # Create bootable device
 if ! sudo dd bs=4M if="${arch_iso_file}" of="${selected_disk}" status=progress oflag=sync; then
-    print_red "ERROR: Creating USB Device"
-    exit 1
+	print_red "ERROR: Creating USB Device"
+	exit 1
 fi
 print_green "Bootable USB Device successfully created"
 

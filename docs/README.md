@@ -15,18 +15,16 @@
 
 ## Create Bootable USB Device
 
-This POSIX script downloads the latest official [Arch Linux ISO](https://archlinux.org/download/) and creates a bootable USB device on Linux.
+This POSIX script downloads the latest [Arch OS](https://github.com/murkl/arch-os) or official [Arch Linux](https://archlinux.org/download/) ISO and creates a bootable USB device on Linux.
 
 ```
 curl -Ls https://raw.githubusercontent.com/murkl/arch-os-creator/refs/heads/main/creator.sh | bash
 ```
 
-Afterwards install: **[ ➜ Arch OS](https://github.com/murkl/arch-os)**
-
 ### Dependencies
 
 ```
-sh curl lsblk sha256sum dd grep
+coreutils util-linux grep sed curl sudo ncurses
 ```
 
 ### Environment Variables
