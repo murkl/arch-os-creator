@@ -4,8 +4,8 @@
 # VARIABLES
 # /////////////////////////////////////////////////////
 
-[ -z "$ARCH_ISO_DOWNLOAD_DIR" ] && ARCH_ISO_DOWNLOAD_DIR="$HOME/Downloads"
-[ -z "$ARCH_ISO_DOWNLOAD_MIRROR" ] && ARCH_ISO_DOWNLOAD_MIRROR="https://mirrors.xtom.de/archlinux/iso/latest"
+[ -z "$DOWNLOAD_DIR" ] && DOWNLOAD_DIR="$HOME/Downloads"
+[ -z "$ARCH_LINUX_ISO_MIRROR" ] && ARCH_LINUX_ISO_MIRROR="https://mirrors.xtom.de/archlinux/iso/latest"
 ARCH_OS_RELEASES_API="https://api.github.com/repos/murkl/arch-os/releases/latest"
 
 # /////////////////////////////////////////////////////
@@ -25,10 +25,10 @@ print_mesg() { printf '%s\n' "$1"; }
 # MAIN
 # /////////////////////////////////////////////////////
 
-trap '[ -n "$arch_iso_file" ] && rm -f "$ARCH_ISO_DOWNLOAD_DIR/$arch_iso_file.part"' INT TERM HUP
+trap '[ -n "$arch_iso_file" ] && rm -f "$DOWNLOAD_DIR/$arch_iso_file.part"; exit 130' INT TERM HUP
 
 clear # Clear the screen & print welcome message
-mkdir -p "$ARCH_ISO_DOWNLOAD_DIR" || exit 1
+mkdir -p "$DOWNLOAD_DIR" || exit 1
 print_title "Welcome to Arch OS Bootable Device Creator"
 print_mesg "This Script download & create a bootable Device"
 print_mesg "from the latest Arch OS or Arch Linux ISO."
@@ -44,11 +44,11 @@ case "$use_archlinux" in
 [Yy]*)
 	iso_source="Arch Linux"
 	iso_hash=""
-	arch_latest_version=$(curl -Lfs "${ARCH_ISO_DOWNLOAD_MIRROR}/arch/version") || exit 1
+	arch_latest_version=$(curl -Lfs "${ARCH_LINUX_ISO_MIRROR}/arch/version") || exit 1
 	arch_iso_file="archlinux-${arch_latest_version}-x86_64.iso"
 	arch_sha_file="archlinux-${arch_latest_version}-x86_64.sha256"
-	iso_url="${ARCH_ISO_DOWNLOAD_MIRROR}/${arch_iso_file}"
-	sha_url="${ARCH_ISO_DOWNLOAD_MIRROR}/sha256sums.txt"
+	iso_url="${ARCH_LINUX_ISO_MIRROR}/${arch_iso_file}"
+	sha_url="${ARCH_LINUX_ISO_MIRROR}/sha256sums.txt"
 	;;
 *)
 	iso_source="Arch OS"
@@ -69,16 +69,16 @@ esac
 echo # Printing info
 print_info "ISO Source:   ${iso_source}"
 print_info "ISO File:     ${arch_iso_file}"
-print_info "Download Dir: ${ARCH_ISO_DOWNLOAD_DIR}"
+print_info "Download Dir: ${DOWNLOAD_DIR}"
 
 # Downloading ISO if not exists
 echo && print_title "Downloading ISO"
-if ! [ -f "${ARCH_ISO_DOWNLOAD_DIR}/${arch_iso_file}" ]; then
-	if ! curl -Lf --progress-bar "${iso_url}" -o "${ARCH_ISO_DOWNLOAD_DIR}/${arch_iso_file}.part"; then
+if ! [ -f "${DOWNLOAD_DIR}/${arch_iso_file}" ]; then
+	if ! curl -Lf --progress-bar "${iso_url}" -o "${DOWNLOAD_DIR}/${arch_iso_file}.part"; then
 		print_red "ERROR: Downloading ISO"
 		exit 1
 	fi
-	if ! mv "${ARCH_ISO_DOWNLOAD_DIR}/${arch_iso_file}.part" "${ARCH_ISO_DOWNLOAD_DIR}/${arch_iso_file}"; then
+	if ! mv "${DOWNLOAD_DIR}/${arch_iso_file}.part" "${DOWNLOAD_DIR}/${arch_iso_file}"; then
 		print_red "ERROR: Moving ISO"
 		exit 1
 	fi
@@ -88,12 +88,12 @@ else
 fi
 
 # Provide Checksum (from API digest or remote sha file)
-if ! [ -f "${ARCH_ISO_DOWNLOAD_DIR}/${arch_sha_file}" ]; then
+if ! [ -f "${DOWNLOAD_DIR}/${arch_sha_file}" ]; then
 	if [ -n "$iso_hash" ]; then
-		printf '%s  %s\n' "$iso_hash" "$arch_iso_file" >"${ARCH_ISO_DOWNLOAD_DIR}/${arch_sha_file}"
+		printf '%s  %s\n' "$iso_hash" "$arch_iso_file" >"${DOWNLOAD_DIR}/${arch_sha_file}"
 		print_green "Stored: ${arch_sha_file} from release digest"
 	elif [ -n "$sha_url" ]; then
-		if ! curl -Lf --progress-bar "${sha_url}" -o "${ARCH_ISO_DOWNLOAD_DIR}/${arch_sha_file}"; then
+		if ! curl -Lf --progress-bar "${sha_url}" -o "${DOWNLOAD_DIR}/${arch_sha_file}"; then
 			print_red "ERROR: Downloading Checksum"
 			exit 1
 		fi
@@ -106,7 +106,7 @@ else
 fi
 
 # Check ISO sum
-cd "$ARCH_ISO_DOWNLOAD_DIR" || exit 1
+cd "$DOWNLOAD_DIR" || exit 1
 if [ -n "$arch_sha_file" ] && [ -f "$arch_sha_file" ]; then
 	print_white "sha256sum: ${arch_iso_file}..."
 	if grep -qFw -e "$(sha256sum "$arch_iso_file")" "$arch_sha_file"; then
@@ -121,11 +121,11 @@ fi
 
 # Choose Disk
 echo && print_title "USB Target Device"
-print_white "Choose Disk Number:" && echo
 
 # List USB devices and number them
 disk_list=$(lsblk -d -n -r -o NAME,TRAN | grep ' usb$' | cut -d' ' -f1) || exit 1
 [ -z "$disk_list" ] && print_red "No USB device found" && exit 1
+print_white "Choose Disk Number:" && echo
 counter=1 && printf '%s\n' "$disk_list" | while read -r disk_line; do
 	size=$(lsblk -d -n -o SIZE /dev/"$disk_line")
 	printf '%d) /dev/%s (%s)\n' "$counter" "$disk_line" "$size"
@@ -153,11 +153,26 @@ selected_disk="/dev/$(printf '%s\n' "$disk_list" | sed -n "${user_input}p")"
 	print_red "ERROR: ${selected_disk} is not a block device"
 	exit 1
 }
-if lsblk -nro MOUNTPOINT "$selected_disk" | grep -q .; then
-	print_red "ERROR: ${selected_disk} has mounted partitions — unmount first"
-	exit 1
-fi
 print_green "Selected Disk: ${selected_disk}"
+
+# Unmount partitions if necessary
+if lsblk -nro MOUNTPOINT "$selected_disk" | grep -q .; then
+	print_yellow "${selected_disk} has mounted partitions"
+	printf "Unmount and proceed? [y/N]: "
+	read -r confirm_umount </dev/tty
+	case "$confirm_umount" in
+	[Yy]*) ;;
+	*) print_red "Operation cancelled" && exit 0 ;;
+	esac
+	lsblk -nro MOUNTPOINT "$selected_disk" | while read -r mp; do
+		[ -n "$mp" ] && sudo umount "$mp"
+	done
+	lsblk -nro MOUNTPOINT "$selected_disk" | grep -q . && {
+		print_red "ERROR: Failed to unmount some partitions"
+		exit 1
+	}
+	print_green "Unmounted partitions"
+fi
 
 # Create USB Device
 echo && print_title "Create Bootable USB Device..."
