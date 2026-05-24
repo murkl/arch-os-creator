@@ -25,6 +25,8 @@ print_mesg() { printf '%s\n' "$1"; }
 # MAIN
 # /////////////////////////////////////////////////////
 
+trap '[ -n "$arch_iso_file" ] && rm -f "$ARCH_ISO_DOWNLOAD_DIR/$arch_iso_file.part"' INT TERM HUP
+
 clear # Clear the screen & print welcome message
 mkdir -p "$ARCH_ISO_DOWNLOAD_DIR" || exit 1
 print_title "Welcome to Arch OS Bootable Device Creator"
@@ -41,6 +43,7 @@ read -r use_archlinux </dev/tty
 case "$use_archlinux" in
 [Yy]*)
 	iso_source="Arch Linux"
+	iso_hash=""
 	arch_latest_version=$(curl -Lfs "${ARCH_ISO_DOWNLOAD_MIRROR}/arch/version") || exit 1
 	arch_iso_file="archlinux-${arch_latest_version}-x86_64.iso"
 	arch_sha_file="archlinux-${arch_latest_version}-x86_64.sha256"
@@ -49,19 +52,21 @@ case "$use_archlinux" in
 	;;
 *)
 	iso_source="Arch OS"
+	sha_url=""
 	release_json=$(curl -Lfs "$ARCH_OS_RELEASES_API") || {
 		print_red "ERROR: Fetching Arch OS release"
 		exit 1
 	}
 	iso_url=$(printf '%s' "$release_json" | grep -oE 'https://[^"]+\.iso' | head -n1)
-	sha_url=$(printf '%s' "$release_json" | grep -oE 'https://[^"]+\.sha256' | head -n1)
 	[ -z "$iso_url" ] && print_red "ERROR: No ISO asset found" && exit 1
+	iso_hash=$(printf '%s' "$release_json" | grep -oE 'sha256:[a-f0-9]{64}' | head -n1)
+	iso_hash="${iso_hash#sha256:}"
 	arch_iso_file="${iso_url##*/}"
 	arch_sha_file="${arch_iso_file}.sha256"
 	;;
 esac
 
-echo
+echo # Printing info
 print_info "ISO Source:   ${iso_source}"
 print_info "ISO File:     ${arch_iso_file}"
 print_info "Download Dir: ${ARCH_ISO_DOWNLOAD_DIR}"
@@ -82,13 +87,19 @@ else
 	print_white "Skipped: ${arch_iso_file} already exists"
 fi
 
-# Downloading Checksum if not exists
+# Provide Checksum (from API digest or remote sha file)
 if ! [ -f "${ARCH_ISO_DOWNLOAD_DIR}/${arch_sha_file}" ]; then
-	if ! curl -Lf --progress-bar "${sha_url}" -o "${ARCH_ISO_DOWNLOAD_DIR}/${arch_sha_file}"; then
-		print_red "ERROR: Downloading Checksum"
-		exit 1
-	else
+	if [ -n "$iso_hash" ]; then
+		printf '%s  %s\n' "$iso_hash" "$arch_iso_file" >"${ARCH_ISO_DOWNLOAD_DIR}/${arch_sha_file}"
+		print_green "Stored: ${arch_sha_file} from release digest"
+	elif [ -n "$sha_url" ]; then
+		if ! curl -Lf --progress-bar "${sha_url}" -o "${ARCH_ISO_DOWNLOAD_DIR}/${arch_sha_file}"; then
+			print_red "ERROR: Downloading Checksum"
+			exit 1
+		fi
 		print_green "Finished: ${arch_sha_file} successfully downloaded"
+	else
+		print_yellow "Skipped: No checksum available"
 	fi
 else
 	print_white "Skipped: ${arch_sha_file} already exists"
@@ -96,21 +107,25 @@ fi
 
 # Check ISO sum
 cd "$ARCH_ISO_DOWNLOAD_DIR" || exit 1
-print_white "sha256sum: ${arch_iso_file}..."
-if grep -qrnw "${arch_sha_file}" -e "$(sha256sum "${arch_iso_file}")"; then
-	print_green "Checksum is correct"
+if [ -n "$arch_sha_file" ] && [ -f "$arch_sha_file" ]; then
+	print_white "sha256sum: ${arch_iso_file}..."
+	if grep -qFw -e "$(sha256sum "$arch_iso_file")" "$arch_sha_file"; then
+		print_green "Checksum is correct"
+	else
+		print_red "ERROR: Checksum incorrect"
+		exit 1
+	fi
 else
-	print_red "ERROR: Checksum incorrect"
-	exit 1
+	print_yellow "Skipped: Checksum verification (no checksum available)"
 fi
 
 # Choose Disk
 echo && print_title "USB Target Device"
 print_white "Choose Disk Number:" && echo
 
-# List disks and number them
-disk_list=$(lsblk -I 8 -d -o KNAME -n) || exit 1
-[ -z "$disk_list" ] && print_red "No disk found" && exit 1
+# List USB devices and number them
+disk_list=$(lsblk -d -n -r -o NAME,TRAN | grep ' usb$' | cut -d' ' -f1) || exit 1
+[ -z "$disk_list" ] && print_red "No USB device found" && exit 1
 counter=1 && printf '%s\n' "$disk_list" | while read -r disk_line; do
 	size=$(lsblk -d -n -o SIZE /dev/"$disk_line")
 	printf '%d) /dev/%s (%s)\n' "$counter" "$disk_line" "$size"
@@ -133,9 +148,15 @@ if ! [ "$user_input" -eq "$user_input" ] 2>/dev/null ||
 fi
 
 # Select the corresponding disk
-unset selected_disk
-selected_disk=$(printf '%s\n' "$disk_list" | sed -n "${user_input}p")
-selected_disk="/dev/$selected_disk"
+selected_disk="/dev/$(printf '%s\n' "$disk_list" | sed -n "${user_input}p")"
+[ -b "$selected_disk" ] || {
+	print_red "ERROR: ${selected_disk} is not a block device"
+	exit 1
+}
+if lsblk -nro MOUNTPOINT "$selected_disk" | grep -q .; then
+	print_red "ERROR: ${selected_disk} has mounted partitions — unmount first"
+	exit 1
+fi
 print_green "Selected Disk: ${selected_disk}"
 
 # Create USB Device
