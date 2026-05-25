@@ -155,25 +155,6 @@ selected_disk="/dev/$(printf '%s\n' "$disk_list" | sed -n "${user_input}p")"
 }
 print_green "Selected Disk: ${selected_disk}"
 
-# Unmount partitions if necessary
-if lsblk -nro MOUNTPOINT "$selected_disk" | grep -q .; then
-	print_yellow "${selected_disk} has mounted partitions"
-	printf "Unmount and proceed? [y/N]: "
-	read -r confirm_umount </dev/tty
-	case "$confirm_umount" in
-	[Yy]*) ;;
-	*) print_red "Operation cancelled" && exit 0 ;;
-	esac
-	lsblk -nro MOUNTPOINT "$selected_disk" | while read -r mp; do
-		[ -n "$mp" ] && sudo umount "$mp"
-	done
-	lsblk -nro MOUNTPOINT "$selected_disk" | grep -q . && {
-		print_red "ERROR: Failed to unmount some partitions"
-		exit 1
-	}
-	print_green "Unmounted partitions"
-fi
-
 # Create USB Device
 echo && print_title "Create Bootable USB Device..."
 printf "CAUTION: All data on %s will be removed! Really proceed? [y/N]: " "$selected_disk"
@@ -182,6 +163,18 @@ case "$confirm" in
 [Yy]*) print_info "Proceeding with ${selected_disk} (${arch_iso_file})" ;;
 *) print_red "Operation cancelled" && exit 0 ;;
 esac
+
+# Unmount partitions if necessary (lazy as fallback for busy mounts)
+if lsblk -nro MOUNTPOINT "$selected_disk" | grep -q .; then
+	lsblk -nro MOUNTPOINT "$selected_disk" | while read -r mp; do
+		[ -n "$mp" ] && { sudo umount "$mp" 2>/dev/null || sudo umount -l "$mp"; }
+	done
+	lsblk -nro MOUNTPOINT "$selected_disk" | grep -q . && {
+		print_red "ERROR: Failed to unmount some partitions"
+		exit 1
+	}
+	print_green "Unmounted partitions"
+fi
 
 # Create bootable device
 if ! sudo dd bs=4M if="${arch_iso_file}" of="${selected_disk}" status=progress oflag=sync; then
