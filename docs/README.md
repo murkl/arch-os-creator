@@ -1,6 +1,6 @@
 <div align="center">
 
-# Arch OS Bootable Device Creator
+# Arch Linux Bootable Device Creator
 
 **[ ➜ Run One-line POSIX Executable](#create-bootable-usb-device)**
 
@@ -29,7 +29,6 @@ The default variables can be overwritten with `export`. The script checks whethe
 export DOWNLOAD_DIR="~/Downloads"
 export ARCH_LINUX_ISO_MIRROR="https://mirrors.xtom.de/archlinux/iso/latest"
 ```
-
 
 <div align="center">
   <p>
