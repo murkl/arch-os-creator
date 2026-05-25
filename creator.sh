@@ -36,7 +36,7 @@ echo && print_mesg "Exit with CTRL + C"
 
 # Choose ISO source
 echo && print_title "ISO Source"
-printf "Use official Arch Linux ISO instead of Arch OS? [y/N]: "
+printf ":: Use official Arch Linux ISO instead of Arch OS? [y/N]: "
 read -r use_archlinux </dev/tty
 
 # Fetch download infos
@@ -157,7 +157,7 @@ print_green "Selected Disk: ${selected_disk}"
 
 # Create USB Device
 echo && print_title "Create Bootable USB Device..."
-printf "CAUTION: All data on %s will be removed! Really proceed? [y/N]: " "$selected_disk"
+printf ":: CAUTION: All data on %s will be removed! Really proceed? [y/N]: " "$selected_disk"
 read -r confirm </dev/tty
 case "$confirm" in
 [Yy]*) print_info "Proceeding with ${selected_disk} (${arch_iso_file})" ;;
